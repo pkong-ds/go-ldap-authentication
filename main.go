@@ -1,6 +1,7 @@
 package main
 
 import (
+	"crypto/tls"
 	"fmt"
 	"log"
 
@@ -50,6 +51,32 @@ func (l *LDAPClient) Connect() (error) {
 	return nil
 }
 
+func (l *LDAPClient) StartTLSConnect() (error) {
+	conn, err := ldap.DialURL(fmt.Sprintf("%s:%d", l.host, l.port))
+	if err != nil {
+		log.Fatalf("Failed to connect to LDAP server: %s", err)
+		return err
+	}
+
+	l.conn = conn
+
+	err = l.conn.StartTLS(&tls.Config{InsecureSkipVerify: true})
+	if err != nil {
+		log.Fatalf("Failed to start TLS connection: %s", err)
+		return err
+	}
+
+	// Bind to the LDAP server with read access
+	err = l.conn.Bind(l.bindDN, l.bindPassword)
+	if err != nil {
+		log.Fatalf("Failed to bind to LDAP server: %s", err)
+		return err
+	}
+
+	return nil
+}
+
+
 func (l *LDAPClient) Close() {
 	l.conn.Close()
 }
@@ -84,7 +111,6 @@ func (l *LDAPClient) AuthenticateUser() (error) {
 	return nil
 }
 
-
 func main() {
 
 	// Create a new LDAP client
@@ -92,7 +118,7 @@ func main() {
 	// client := NewLDAPClient("ldaps://localhost", 636, "cn=admin,dc=example,dc=org", "admin", "chrislee", "123")
 
 	// Connect to the LDAP server
-	err := client.Connect()
+	err := client.StartTLSConnect()
 	if err != nil {
 		log.Fatalf("Failed to connect: %s", err)
 	} else {
