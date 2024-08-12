@@ -1,4 +1,4 @@
-# How to start this thing
+# How to setup the LDAP server
 
 Install mkcert
 
@@ -32,3 +32,11 @@ For first time setup
   - Password: `admin`
 3. Create a POSIX group
 4. Create as many users as you want.
+
+# How to run the example program
+
+Run `make start`.
+
+```
+make start
+```
