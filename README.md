@@ -1,4 +1,8 @@
-# How to setup the LDAP server
+# How to connect to the hosted LDAP server
+
+Search "LDAP server (testing)" in the 1Password vault.
+
+# How to setup the LDAP server locally
 
 Install mkcert
 
