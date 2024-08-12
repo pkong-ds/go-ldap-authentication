@@ -14,6 +14,9 @@ services:
       LDAP_TLS_CRT_FILENAME: "localhost.crt"
       LDAP_TLS_KEY_FILENAME: "localhost-key.key"
       LDAP_TLS_CA_CRT_FILENAME: "rootCA.crt"
+      # By default, the server verify the client certificate,
+      # But we do not use client certificate, so we set to never.
+      LDAP_TLS_VERIFY_CLIENT: "never"
   ldap-admin:
     image: osixia/phpldapadmin:latest
     ports:
