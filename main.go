@@ -54,7 +54,6 @@ func (l *LDAPClient) Bind() error {
 func (l *LDAPClient) StartTLSConnect() error {
 	conn, err := ldap.DialURL(l.URL)
 	if err != nil {
-		log.Fatalf("Failed to connect to LDAP server: %s", err)
 		return err
 	}
 
@@ -62,7 +61,6 @@ func (l *LDAPClient) StartTLSConnect() error {
 
 	err = l.conn.StartTLS(&tls.Config{InsecureSkipVerify: true})
 	if err != nil {
-		log.Fatalf("Failed to start TLS connection: %s", err)
 		return err
 	}
 
