@@ -1,3 +1,11 @@
+.PHONY: tls
+tls:
+	mkcert localhost
+
+.PHONY: copy-ca-cert
+copy-ca-cert:
+	cp "$$(mkcert -CAROOT)"/rootCA.pem .
+
 include .env
 
 # LDAP_URL=ldap://localhost:389

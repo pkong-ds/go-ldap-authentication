@@ -1,47 +1,34 @@
-# Prerequisite
+# How to start this thing
 
-Making locally-trusted development certificates for localhost for local TLS connection.
-This can be done by using `mkcert`
-
-```
-mkcert localhost
-```
-
-Then Mounting those file to the same directory.
-
-ref: https://github.com/osixia/docker-openldap?tab=readme-ov-file#use-your-own-certificate
-
-# Quick Start
-
-To start the LDAP Server:
+Install mkcert
 
 ```
-docker run --name ldap-server \
-        --hostname ldap-server \
-				--volume /PATH-TO-CERT:/container/service/slapd/assets/certs \
-				--env LDAP_TLS_CRT_FILENAME=my-ldap.crt \
-				--env LDAP_TLS_KEY_FILENAME=my-ldap.key \
-				--env LDAP_TLS_CA_CRT_FILENAME=the-ca.crt \
-				--env LDAP_TLS_VERIFY_CLIENT="try" \
-		-p 389:389 -p 636:636 \
-		--detach \
-		osixia/openldap:latest
-
-docker run --name ldap-admin \
-    -p 6443:443 \
-    --link ldap-server:ldap-host \
-    --env PHPLDAPADMIN_LDAP_HOSTS=ldap-host \
-    --detach \
-    osixia/phpldapadmin:latest
+brew install mkcert
 ```
 
-Then go to https://localhost:6443/ , login with
+Run `make tls` to generate a TLS certificate and the key.
 
-- Admin DN: `cn=admin,dc=example,dc=org`
-- Admin Password: `admin`
+```
+make tls
+```
 
-Now you can config your own ldap server!
+Run `make copy-ca-cert` to copy the mkcert root CA certificate in this project.
 
-ref: https://blog.puckwang.com/posts/2022/use-docker-run-ldap-server/
+```
+make copy-ca-cert
+```
 
-To run the ldapclient, modify `.env` parameter for your ldap server configuration then run `make start`, then enter your login credentials in terminal.
+Run the LDAP server and the LDAP admin server.
+
+```
+docker compose up -d
+```
+
+For first time setup
+
+1. Visit http://localhost:58080
+2. Sign in with
+  - DN: `cn=admin,dc=example,dc=org`
+  - Password: `admin`
+3. Create a POSIX group
+4. Create as many users as you want.

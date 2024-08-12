@@ -1,0 +1,29 @@
+services:
+  ldap-server:
+    image: osixia/openldap:latest
+    ports:
+    - "389:389"
+    - "636:636"
+    volumes:
+    - ./rootCA.pem:/container/service/slapd/assets/certs/rootCA.crt
+    - ./localhost.pem:/container/service/slapd/assets/certs/localhost.crt
+    - ./localhost-key.pem:/container/service/slapd/assets/certs/localhost-key.key
+    - ldap_database_data:/var/lib/ldap
+    - ldap_config_data:/etc/ldap/slapd.d
+    environment:
+      LDAP_TLS_CRT_FILENAME: "localhost.crt"
+      LDAP_TLS_KEY_FILENAME: "localhost-key.key"
+      LDAP_TLS_CA_CRT_FILENAME: "rootCA.crt"
+  ldap-admin:
+    image: osixia/phpldapadmin:latest
+    ports:
+    - "58080:80"
+    environment:
+      PHPLDAPADMIN_LDAP_HOSTS: "ldap-server"
+      PHPLDAPADMIN_HTTPS: "false"
+
+volumes:
+  ldap_database_data:
+    driver: local
+  ldap_config_data:
+    driver: local
