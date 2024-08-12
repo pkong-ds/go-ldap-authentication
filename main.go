@@ -5,84 +5,66 @@ import (
 	"crypto/tls"
 	"fmt"
 	"log"
+	"net/url"
 	"os"
 
 	"github.com/go-ldap/ldap/v3"
 )
 
-type LDAPClient struct {
-	conn *ldap.Conn
-
-	URL          string
-	baseDN       string
-	bindDN       string
-	bindPassword string
-	searchQuery  string
+type LDAPConfig struct {
+	URL          *url.URL
+	BaseDN       string
+	BindDN       string
+	BindPassword string
+	SearchQuery  string
 }
 
-func NewLDAPClient() *LDAPClient {
-	return &LDAPClient{
-		URL:          os.Getenv("LDAP_URL"),
-		baseDN:       os.Getenv("LDAP_BASE_DN"),
-		bindDN:       os.Getenv("LDAP_BIND_DN"),
-		bindPassword: os.Getenv("LDAP_BIND_PASSWORD"),
-		searchQuery:  os.Getenv("LDAP_SEARCH_QUERY"),
-	}
-}
-
-func (l *LDAPClient) Connect() error {
-	conn, err := ldap.DialURL(l.URL)
+func NewLDAPConfigFromEnv() (*LDAPConfig, error) {
+	urlStr := os.Getenv("LDAP_URL")
+	u, err := url.Parse(urlStr)
 	if err != nil {
-		log.Fatalf("Failed to connect to LDAP server: %s", err)
-		return err
+		return nil, err
 	}
 
-	l.conn = conn
+	return &LDAPConfig{
+		URL:          u,
+		BaseDN:       os.Getenv("LDAP_BASE_DN"),
+		BindDN:       os.Getenv("LDAP_BIND_DN"),
+		BindPassword: os.Getenv("LDAP_BIND_PASSWORD"),
+		SearchQuery:  os.Getenv("LDAP_SEARCH_QUERY"),
+	}, nil
+}
+
+func (c *LDAPConfig) Connect() (*ldap.Conn, error) {
+	return ldap.DialURL(c.URL.String())
+}
+
+func (c *LDAPConfig) StartTLS(conn *ldap.Conn) error {
+	return conn.StartTLS(&tls.Config{
+		ServerName: c.URL.Hostname(),
+	})
+}
+
+func (c *LDAPConfig) Bind(conn *ldap.Conn) error {
+	err := conn.Bind(c.BindDN, c.BindPassword)
+	if err != nil {
+		return fmt.Errorf("failed to authenticate search user: %w", err)
+	}
 	return nil
 }
 
-func (l *LDAPClient) Bind() error {
-	err := l.conn.Bind(l.bindDN, l.bindPassword)
-	if err != nil {
-		log.Fatalf("Failed to bind to LDAP server: %s", err)
-		return err
-	}
-
-	return nil
-}
-
-func (l *LDAPClient) StartTLSConnect() error {
-	conn, err := ldap.DialURL(l.URL)
-	if err != nil {
-		return err
-	}
-
-	l.conn = conn
-
-	err = l.conn.StartTLS(&tls.Config{InsecureSkipVerify: true})
-	if err != nil {
-		return err
-	}
-
-	return nil
-}
-
-func (l *LDAPClient) Close() {
-	l.conn.Close()
-}
-
-func (l *LDAPClient) AuthenticateUser(username string, password string) error {
-	fmt.Println(l.searchQuery)
+func (c *LDAPConfig) AuthenticateUser(conn *ldap.Conn, username string, password string) error {
+	fmt.Println(c.SearchQuery)
 	// Search for the user
 	searchRequest := ldap.NewSearchRequest(
-		l.baseDN,
+		c.BaseDN,
 		ldap.ScopeWholeSubtree, ldap.NeverDerefAliases, 0, 0, false,
-		fmt.Sprintf("(%v)", &ldap.AttributeTypeAndValue{Type: l.searchQuery, Value: username}),
+		fmt.Sprintf("(%v)", &ldap.AttributeTypeAndValue{Type: c.SearchQuery, Value: username}),
 		[]string{},
 		nil,
 	)
 
-	sr, err := l.conn.Search(searchRequest)
+	sr, err := conn.Search(searchRequest)
 	if err != nil {
 		return err
 	}
@@ -94,7 +76,7 @@ func (l *LDAPClient) AuthenticateUser(username string, password string) error {
 	userDN := sr.Entries[0].DN
 
 	// Bind as the user to verify their password
-	err = l.conn.Bind(userDN, password)
+	err = conn.Bind(userDN, password)
 	if err != nil {
 		return fmt.Errorf("failed to authenticate user: %s", err)
 	}
@@ -102,7 +84,7 @@ func (l *LDAPClient) AuthenticateUser(username string, password string) error {
 	return nil
 }
 
-func main() {
+func doMain() (err error) {
 	// get command line input for username and password
 	scanner := bufio.NewScanner(os.Stdin)
 	fmt.Print("Enter username: ")
@@ -112,68 +94,61 @@ func main() {
 	scanner.Scan()
 	password := scanner.Text()
 
-	var err error
-	// Create a new LDAP client
-	client := NewLDAPClient()
-	// Check if url starts with ldap://
-	if client.URL[:7] == "ldap://" {
-		// Connect to the LDAP server
-		err = client.StartTLSConnect()
+	cfg, err := NewLDAPConfigFromEnv()
+	if err != nil {
+		err = fmt.Errorf("failed to create LDAP config from env: %w", err)
+		return
+	}
+
+	var conn *ldap.Conn
+	if cfg.URL.Scheme == "ldap" {
+		conn, err = cfg.Connect()
 		if err != nil {
-			log.Printf("Failed to connect: %s", err)
-			err = client.Connect()
+			err = fmt.Errorf("failed to connect to LDAP server: %w", err)
+			return
+		}
+
+		// Try StartTLS
+		err = cfg.StartTLS(conn)
+		if err != nil {
+			log.Printf("failed to StartTLS: %v\n", err)
+			log.Printf("fallback to plain LDAP\n")
+			conn, err = cfg.Connect()
 			if err != nil {
-				log.Fatalf("Failed to connect: %s", err)
-			} else {
-				fmt.Println("Connected")
+				err = fmt.Errorf("failed to connect to LDAP server: %w", err)
+				return
 			}
-		}
-	} else if client.URL[:8] == "ldaps://" {
-		// Connect to the LDAP server
-		err = client.Connect()
-		if err != nil {
-			log.Fatalf("Failed to connect: %s", err)
 		} else {
-			fmt.Println("Connected")
+			log.Printf("StartTLS\n")
+		}
+	} else if cfg.URL.Scheme == "ldaps" {
+		conn, err = cfg.Connect()
+		if err != nil {
+			err = fmt.Errorf("failed to connect to LDAP server: %w", err)
+			return
 		}
 	}
+	defer conn.Close()
+	log.Printf("connected\n")
 
-	// Bind to the LDAP server
-	err = client.Bind()
+	err = cfg.Bind(conn)
 	if err != nil {
-		log.Fatalf("Failed to bind: %s", err)
-	} else {
-		fmt.Println("Bound")
+		return
+	}
+	log.Printf("bound\n")
+
+	err = cfg.AuthenticateUser(conn, username, password)
+	if err != nil {
+		return
 	}
 
-	// Authenticate the user
-	err = client.AuthenticateUser(username, password)
-	if err != nil {
-		log.Fatalf("Failed to authenticate user: %s", err)
-	} else {
-		fmt.Println("User Authenticated")
-	}
-
-	// Close the connection
-	client.Close()
+	fmt.Println("user Authenticated")
+	return nil
 }
 
-/*
-docker run --name ldap-server \
-        --hostname ldap-server \
-				--volume /Users/york/Desktop/Oursky/certs:/container/service/slapd/assets/certs \
-				--env LDAP_TLS_CRT_FILENAME=my-ldap.crt \
-				--env LDAP_TLS_KEY_FILENAME=my-ldap.key \
-				--env LDAP_TLS_CA_CRT_FILENAME=the-ca.crt \
-				--env LDAP_TLS_VERIFY_CLIENT="try" \
-		-p 389:389 -p 636:636 \
-		--detach \
-		osixia/openldap:latest
-
-docker run --name ldap-admin \
-    -p 6443:443 \
-    --link ldap-server:ldap-host \
-    --env PHPLDAPADMIN_LDAP_HOSTS=ldap-host \
-    --detach \
-    osixia/phpldapadmin:latest
-*/
+func main() {
+	err := doMain()
+	if err != nil {
+		panic(err)
+	}
+}
