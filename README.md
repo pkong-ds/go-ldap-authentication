@@ -34,7 +34,7 @@ For first time setup
 2. Sign in with
   - DN: `cn=admin,dc=example,dc=org`
   - Password: `admin`
-3. Create a POSIX group
+3. [Create a POSIX group](https://www.alibabacloud.com/blog/how-to-install-openldap-and-phpldapadmin-on-ubuntu-16-04_594318)
 4. Create as many users as you want.
 
 # How to run the example program
